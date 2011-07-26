@@ -1,13 +1,30 @@
-all: main
+.SUFFIXES:
+.SUFFIXES: .c .o
 
-main: objects
-	gcc -pthread -lventrilo3 *.o -o vent
+CC=gcc
+PROGRAM=vent
+CPPFLAGS=-Wall
+LDLIBS=-pthread -lventrilo3
+OBJDIR=obj
+OUTDIR=bin
 
-objects:
-	gcc -Wall -c *.c
+vpath %.c src
+vpath %.h src
+
+objects = $(addprefix $(OBJDIR)/, main.o channels.o users.o vent.o )
+headers = $(channels.h users.h vent.h)
+
+ku: $(objects)
+	$(CC) $(CPPFLAGS) -o $(OUTDIR)/$(PROGRAM) $(objects) $(LDLIBS)
+
+obj/%.o : %.c $(headers)
+	$(CC) $(CPPFLAGS) -c -o $@ $<
+
+.PHONY: clean git
+clean:
+	rm $(objects)
+	rm $(OUTDIR)/$(PROGRAM)
 
 git:
 	git push -u origin master
-clean:
-	rm *.o
-	rm vent
+	
