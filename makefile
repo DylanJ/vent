@@ -6,6 +6,8 @@ main: objects
 objects:
 	gcc -Wall -c *.c
 
+git:
+	git push -u origin master
 clean:
 	rm *.o
 	rm vent
