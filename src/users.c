@@ -1,14 +1,6 @@
 #include "users.h"
 
-static v3_user** users;
-
 void users_init( int max_users) {
-	int i;
-	users = malloc( sizeof( v3_user ) * max_users );
-	
-	for( i = 0; i < max_users; i++ ) {
-		users[i] = NULL;
-	}
 }
 
 v3_user* users_get( int userid ) {
@@ -38,12 +30,32 @@ void users_add( int userid ) {
 	printf( "added user: %s\n", user_ptr->name );
 }
 
+void users_update( int userid ) {
+	for( int i = 0; i < MAX_USERS; i++ ) {
+		if ( users[i] == NULL )
+			continue;
+		if ( users[i]->id == userid ) {
+			v3_free_user( users[i] );
+			users[i] = v3_get_user( userid );
+		}
+	}
+}
+
 void users_remove( int userid ) {
 	v3_user *user_ptr = users_get( userid );
 
 	if ( user_ptr == NULL ) { 
 		printf( "user is null\n" );
 		return;
+	}
+
+	for( int i = 0; i < MAX_USERS; i++ ) {
+		if ( users[i] == NULL )
+			continue;
+
+		if ( users[i]->id == userid ) {
+			users[i] = NULL;
+		}
 	}
 
 	v3_free_user( user_ptr );

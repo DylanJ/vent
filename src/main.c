@@ -9,6 +9,7 @@
 #include <pthread.h>
 #include <ventrilo3.h>
 
+#include "users.h"
 #include "channels.h"
 #include "vent.h"
 
@@ -17,11 +18,14 @@
 
 // prototypes
 void help();
+void draw( int root, int depth );
+void draw_user( v3_user* user, int depth );
+void draw_channel( v3_channel* channel, int depth );
 void ctrl_c( int signum );
 void* jukebox_connection( void *connptr );
 void* jukebox_player( void *connptr );
 
-int debug = 2;
+int debug = 0;
 int should_exit = 0;
 
 struct _conninfo {
@@ -76,7 +80,7 @@ void *jukebox_player( void *connptr ) {
 		if ( debug ) {
 			printf( "jukebox: got event type %d\n", ev->type );
 		}
-
+	
 		switch( ev->type ) {
 			case 40:
 				vent_init();
@@ -98,14 +102,21 @@ void *jukebox_player( void *connptr ) {
 			case V3_EVENT_USER_CHAN_MOVE:
 				//event.user.id
 				//event.channel.id
+				vent_user_move( ev->user.id, ev->channel.id );
 				printf( "event user channel move\n" );
+				draw(0, 1);
 				break;
 			case V3_EVENT_CHAN_ADD:
-				vent_add_channel( ev->channel.id );
+				//
+				vent_channel_add( ev->channel.id );
+				printf( "event chan add\n" );
 				break;
 			case V3_EVENT_CHAN_MODIFY:
 				//event.channel.id
 				printf( "event channel modify\n" );
+				vent_channel_modify( ev->channel.id );
+
+				draw(0, 1);
 				break;
 			case V3_EVENT_CHAN_REMOVE:
 				//event.channel.id
@@ -126,11 +137,29 @@ void *jukebox_player( void *connptr ) {
 				//event.pcm.send_type
 				//event.pcm.rate
 				printf( "event user talk start\n" );
+				vent_user_talk_start( ev->user.id, ev->pcm.send_type, ev->pcm.rate );
+				draw(0, 1);
 				break;
 
 			case V3_EVENT_USER_TALK_END:
 				//event.user.id
 				printf( "event user talk end\n" );
+				vent_user_talk_end( ev->user.id );	
+				draw(0, 1);
+				break;
+
+			case V3_EVENT_USER_MODIFY:
+				vent_user_modify( ev->user.id, ev->text.comment,
+					ev->text.url, ev->text.integration_text );
+				printf( "event user modify\n" );
+				draw(0, 1);
+				break;
+
+			case V3_EVENT_USER_LOGOUT:
+				vent_user_logout( ev->user.id, ev->channel.id );
+				printf( "event user modify\n" );
+				draw( 0, 1 );
+				
 				break;
 			case V3_EVENT_PLAY_AUDIO:
 				//event.user.id
@@ -148,11 +177,10 @@ void *jukebox_player( void *connptr ) {
 				//ev.text.integration_text
 				vent_display_motd( ev->user.id, ev->text.comment, ev->text.url, ev->text.integration_text );
 				break;
-
 			case V3_EVENT_CHAT_JOIN:
 				//ev.user.id
 				//ev.data.chatmessage
-
+				draw(0,1);
 				printf( "event chat join\n" );
 				break;
 
@@ -198,7 +226,9 @@ void *jukebox_player( void *connptr ) {
 				break;
 			case V3_EVENT_LOGIN_COMPLETE:
 				v3_change_channel( atoi( conninfo->channelid), "" );
+
 				v3_join_chat();
+				channels_has(2);
 				printf( "event login complete\n" );
 				break;
 		}
@@ -207,11 +237,115 @@ void *jukebox_player( void *connptr ) {
 	pthread_exit(NULL);
 }
 
+void drawtabs( int num ) {
+	for( int i = 0; i < num; i++ ) {
+		printf( "  " );
+	}
+}
+
+void draw_channel( v3_channel* channel, int depth ) {
+
+	char msg[256];
+
+	sprintf( msg, "%s", channel->name );
+
+	if ( strlen( channel->comment ) > 0 ) {
+		sprintf( msg, "%s (%s)", msg, channel->comment );
+	}
+
+	drawtabs( depth );
+	printf( "%s\n", msg );
+}
+
+void draw_user( v3_user* user, int depth ) {
+	// user is lobby
+	char msg[256];
+	
+	if ( user->bitfield & 0x02 ) {
+		
+		sprintf( msg, "%s", user->name );
+		if ( strlen(user->comment) > 0 ) {
+			sprintf( msg, "%s (%s)\n", msg, user->comment );
+		}
+		
+		printf( msg );
+		return;
+	}
+
+	sprintf( msg, "" );
+	
+	if ( user->bitfield & 0x400 ) {
+		strcat( msg, "[G]" );
+	}
+
+	if ( user->is_transmitting ) {
+		strcat( msg, ":<" );
+	}
+
+	strcat( msg, user->name );
+
+	if ( strlen(user->comment) > 0 ) {
+		strcat( msg, "(" );
+		strcat( msg, user->comment );
+		strcat( msg, ")" );
+	}
+	
+	if ( strlen(user->url) > 0 ) {
+		strcat( msg, "(" );
+		strcat( msg, user->url );
+		strcat( msg, ")" );
+	}
+
+	if ( strlen( user->integration_text ) > 0 ) {
+		strcat( msg, "(" );
+		strcat( msg, user->integration_text );
+		strcat( msg, ")" );
+	}
+	
+	drawtabs( depth );
+	printf( "%s\n", msg );	
+//	printf( "%s (%s)(%s)\n", user->name, user->comment, user->url);
+}
+
+void draw(int root, int depth) {
+	
+	for( int i = 0; i < 256; i++ ) {
+		if ( users[i] == NULL )
+			continue;
+		if ( users[i]->channel == root ) {
+			draw_user( users[i], depth );
+		}
+	}
+	
+	for( int i = 0; i < MAX_CHANNELS; i++ ) {
+		if ( channels[i] == NULL )
+			continue;
+		if ( root == channels[i]->parent ) {
+			
+			draw_channel( channels[i], depth );	
+			draw( channels[i]->id, depth + 1 );
+
+		}
+	}
+/*
+	for( int i = 0; i < 256; i++ ) {
+		if ( users[i] == NULL )
+			continue;
+		if ( users[i]->channel == root ) {
+			drawtabs(depth);
+			printf( "u: %s\n", users[i]->name );
+		}
+	}
+*/
+
+}
+
+
+
 
 int main( int argc, char** argv ) {
 	int rc = 0;
 	
-	debug = 1;
 	pthread_t network;
 	pthread_t player;
 
